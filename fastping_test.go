@@ -22,7 +22,7 @@ func TestSource(t *testing.T) {
 		origSource, err := p.Source(tt.firstAddr)
 		if tt.invalid {
 			if err == nil {
-				t.Errorf("[%d] Source should return an error but nothing: %v", i)
+				t.Errorf("[%d] Source should return an error but nothing: %v", i, err)
 			}
 			continue
 		}
@@ -175,7 +175,7 @@ func TestRun(t *testing.T) {
 
 		found1, found100, foundv6 := false, false, false
 		called, idle := false, false
-		p.OnRecv = func(ip *net.IPAddr, d time.Duration) {
+		p.OnRecv = func(ip *net.IPAddr, d time.Duration, t int) {
 			called = true
 			if ip.String() == "127.0.0.1" {
 				found1 = true
@@ -229,14 +229,14 @@ func TestMultiRun(t *testing.T) {
 
 		var mu sync.Mutex
 		res1 := 0
-		p1.OnRecv = func(*net.IPAddr, time.Duration) {
+		p1.OnRecv = func(*net.IPAddr, time.Duration, int) {
 			mu.Lock()
 			res1++
 			mu.Unlock()
 		}
 
 		res2 := 0
-		p2.OnRecv = func(*net.IPAddr, time.Duration) {
+		p2.OnRecv = func(*net.IPAddr, time.Duration, int) {
 			mu.Lock()
 			res2++
 			mu.Unlock()
@@ -310,7 +310,7 @@ func TestRunLoop(t *testing.T) {
 		p.MaxRTT = time.Millisecond * 100
 
 		recvCount, idleCount := 0, 0
-		p.OnRecv = func(*net.IPAddr, time.Duration) {
+		p.OnRecv = func(*net.IPAddr, time.Duration, int) {
 			recvCount++
 		}
 

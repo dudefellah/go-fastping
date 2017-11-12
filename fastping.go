@@ -108,6 +108,7 @@ func ipv4Payload(b []byte) []byte {
 type packet struct {
 	bytes []byte
 	addr  net.Addr
+	ttl   int
 }
 
 type context struct {
@@ -143,9 +144,10 @@ type Pinger struct {
 	// the library calls an idle callback function. It is also used for an
 	// interval time of RunLoop() method
 	MaxRTT time.Duration
+
 	// OnRecv is called with a response packet's source address and its
 	// elapsed time when Pinger receives a response packet.
-	OnRecv func(*net.IPAddr, time.Duration)
+	OnRecv func(*net.IPAddr, time.Duration, int)
 	// OnIdle is called when MaxRTT time passed
 	OnIdle func()
 	// If Debug is true, it prints debug messages to stdout.
@@ -297,7 +299,7 @@ func (p *Pinger) RemoveIPAddr(ip *net.IPAddr) {
 func (p *Pinger) AddHandler(event string, handler interface{}) error {
 	switch event {
 	case "receive":
-		if hdl, ok := handler.(func(*net.IPAddr, time.Duration)); ok {
+		if hdl, ok := handler.(func(*net.IPAddr, time.Duration, int)); ok {
 			p.mu.Lock()
 			p.OnRecv = hdl
 			p.mu.Unlock()
@@ -564,6 +566,11 @@ func (p *Pinger) recvICMP(conn *icmp.PacketConn, recv chan<- *packet, ctx *conte
 		default:
 		}
 
+		packetTTL := -1
+		if conn.IPv4PacketConn() != nil {
+			packetTTL, _ = conn.IPv4PacketConn().TTL()
+		}
+		p.debugln("packet TTL: ", packetTTL)
 		bytes := make([]byte, 512)
 		conn.SetReadDeadline(time.Now().Add(time.Millisecond * 100))
 		p.debugln("recvICMP(): ReadFrom Start")
@@ -590,7 +597,7 @@ func (p *Pinger) recvICMP(conn *icmp.PacketConn, recv chan<- *packet, ctx *conte
 		p.debugln("recvICMP(): p.recv <- packet")
 
 		select {
-		case recv <- &packet{bytes: bytes, addr: ra}:
+		case recv <- &packet{bytes: bytes, ttl: packetTTL, addr: ra}:
 		case <-ctx.stop:
 			p.debugln("recvICMP(): <-ctx.stop")
 			wg.Done()
@@ -663,7 +670,7 @@ func (p *Pinger) procRecv(recv *packet, queue map[string]*net.IPAddr) {
 		handler := p.OnRecv
 		p.mu.Unlock()
 		if handler != nil {
-			handler(ipaddr, rtt)
+			handler(ipaddr, rtt, recv.ttl)
 		}
 	}
 }
